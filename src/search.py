@@ -5,16 +5,10 @@ from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 from langchain_postgres import PGVector
 from langchain_core.prompts import PromptTemplate
-from langchain_core.runnables import RunnablePassthrough
 from langchain_core.output_parsers import StrOutputParser
 
 load_dotenv()
 
-def ingest_pdf():
-    for k in ("PDF_PATH","PG_VECTOR_COLLECTION", "DATABASE_URL"):
-        if not os.getenv(k):
-            raise RuntimeError(f"Environment variable {k} is not set")
-    
 PROMPT_TEMPLATE = """
 CONTEXTO:
 {contexto}
@@ -42,21 +36,7 @@ PERGUNTA DO USUÁRIO:
 RESPONDA A "PERGUNTA DO USUÁRIO"
 """
 
-def format_docs_with_metadata(docs):
-    formatted_docs = []
-    for i, doc in enumerate(docs, start=1):
-        metadata_str = ", ".join([f"{k}: {v}" for k, v in doc.metadata.items()])
-        doc_str = (
-            f"--- Documento {i} ---\n"
-            f"Fonte/Metadados: {metadata_str}\n"
-            f"Texto: {doc.page_content.strip()}"
-        )
-        formatted_docs.append(doc_str)
-    
-    return "\n\n".join(formatted_docs)
-
-
-def get_gemini_retriever():
+def get_gemini_store():
     embeddings = GoogleGenerativeAIEmbeddings(model=os.getenv("GOOGLE_EMBEDDING_MODEL","models/gemini-embedding-001"))
     store = PGVector(
         embeddings=embeddings,
@@ -64,9 +44,9 @@ def get_gemini_retriever():
         connection=os.getenv("DATABASE_URL"),
         use_jsonb=True,
     )
-    return store.as_retriever(search_kwargs={"k": 10})
+    return store
 
-def get_openai_retriever():
+def get_openai_store():
     embeddings = OpenAIEmbeddings(model=os.getenv("OPENAI_EMBEDDING_MODEL","text-embedding-3-small"))
     store = PGVector(
         embeddings=embeddings,
@@ -74,34 +54,49 @@ def get_openai_retriever():
         connection=os.getenv("DATABASE_URL"),
         use_jsonb=True,
     )
-    return store.as_retriever(search_kwargs={"k": 10})
+    return store
 
-
-def run_rag_chain(retriever, question):
-    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+def run_rag(store, question):
+    results = store.similarity_search_with_score(question, k=10)
+    
+    # 1. Formatando os documentos, agora desempacotando a tupla (doc, score)
+    formatted_docs = []
+    for i, (doc, score) in enumerate(results, start=1):
+        metadata_str = ", ".join([f"{k}: {v}" for k, v in doc.metadata.items()])
+        doc_str = (
+            f"--- Documento {i} (Score de similaridade: {score:.4f}) ---\n"
+            f"Fonte/Metadados: {metadata_str}\n"
+            f"Texto: {doc.page_content.strip()}"
+        )
+        formatted_docs.append(doc_str)
+    
+    context_str = "\n\n".join(formatted_docs)
+    
+    # 2. Preparando o LLM e a Chain
+    llm = ChatOpenAI(model="gpt-5-nano", temperature=0)
     prompt = PromptTemplate.from_template(PROMPT_TEMPLATE)
     
-    rag_chain = (
-        {"contexto": retriever | format_docs_with_metadata, "pergunta": RunnablePassthrough()}
-        | prompt
-        | llm
-        | StrOutputParser()
-    )
+    # Chain simples e direta do LCEL
+    rag_chain = prompt | llm | StrOutputParser()
     
     # Retorna estritamente a string gerada pela IA
-    return rag_chain.invoke(question)
-
+    return rag_chain.invoke({"contexto": context_str, "pergunta": question})
 
 def search_prompt():
+    for k in ("PDF_PATH","PG_VECTOR_COLLECTION", "DATABASE_URL"):
+      if not os.getenv(k):
+        raise RuntimeError(f"Environment variable {k} is not set")
+        
+    # Menus de interação sem print no retorno final da resposta
     print("Escolha o modelo de embeddings para busca vetorial:")
     print("1. Google Generative AI Embeddings (Gemini)")
     print("2. OpenAI Embeddings")
     choice = input("Digite 1 ou 2: ")
 
     if choice == "1":
-        retriever = get_gemini_retriever()
+        store = get_gemini_store()
     elif choice == "2":
-        retriever = get_openai_retriever()
+        store = get_openai_store()
     else:
         print("Escolha inválida.")
         return
@@ -109,9 +104,9 @@ def search_prompt():
     question = input("Digite sua pergunta: ")
     
     # Imprime apenas o resultado final
-    resposta = run_rag_chain(retriever, question)
+    resposta = run_rag(store, question)
     print(f"\n{resposta}\n")
-
+    return resposta
 
 if __name__ == "__main__":
     search_prompt()
