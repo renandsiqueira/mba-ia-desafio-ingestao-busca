@@ -1,10 +1,10 @@
 # Desafio MBA Engenharia de Software com IA - Full Cycle
 
-Este projeto usa Python, um ambiente virtual e PostgreSQL com a extensão `pgvector`.
+Este projeto usa Python, um ambiente virtual e PostgreSQL com a extensão `pgvector`. Realiza ingestão de PDFs em dois vetores (OpenAI e Google Gemini) e permite busca e chat com RAG.
 
 ## Pré-requisitos
 
-- Python 3.12 ou compatível com o ambiente virtual do projeto ( O Python 3.14 nao funcionou algumas dependencias )
+- Python 3.12 ou compatível com o ambiente virtual do projeto (Python 3.14 não funcionou com algumas dependências)
 - `pip` e suporte ao módulo `venv`
 - Docker e Docker Compose
 
@@ -25,7 +25,7 @@ python3.12 -m venv .venv
 Ative o ambiente virtual:
 
 ```bash
-source venv/bin/activate
+source .venv/bin/activate
 ```
 
 ## 2. Instalar as dependências
@@ -38,19 +38,29 @@ pip install -r requirements.txt
 
 ## 3. Configurar as variáveis de ambiente
 
-Crie um arquivo `.env` a partir do exemplo do projeto e preencha os valores necessários.
+Crie um arquivo `.env` a partir do `.env.example` e preencha os valores necessários:
 
-As variáveis usadas pelo código atualmente são:
+```bash
+cp .env.example .env
+```
 
-- `PDF_PATH`
-- `PGVECTOR_URL`
-- `PGVECTOR_COLLECTION`
+As variáveis usadas pelo código são:
+
+| Variável | Descrição | Padrão |
+|---|---|---|
+| `PDF_PATH` | Caminho para o arquivo PDF a ser ingerido | `./document.pdf` |
+| `DATABASE_URL` | URL de conexão com o PostgreSQL | `postgresql://postgres:postgres@localhost:5432/rag` |
+| `PG_VECTOR_COLLECTION` | Nome base das coleções no pgvector | `my-embedding-documents` |
+| `GOOGLE_API_KEY` | Chave de API do Google | — |
+| `GOOGLE_EMBEDDING_MODEL` | Modelo de embedding do Google | `models/gemini-embedding-001` |
+| `OPENAI_API_KEY` | Chave de API da OpenAI | — |
+| `OPENAI_EMBEDDING_MODEL` | Modelo de embedding da OpenAI | `text-embedding-3-small` |
+
+> **Atenção:** o modelo `models/embedding-001` foi descontinuado pelo Google. O projeto já usa o modelo atual `models/gemini-embedding-001`.
 
 ## 4. Subir o banco de dados
 
-O projeto já inclui um `docker-compose.yml` com PostgreSQL e `pgvector`.
-
-Suba os containers com:
+O projeto inclui um `docker-compose.yml` com PostgreSQL e `pgvector`.
 
 ```bash
 docker compose up -d
@@ -60,15 +70,25 @@ Isso inicia o banco em `localhost:5432` com as credenciais definidas no compose.
 
 ## 5. Executar os scripts
 
-Depois de preparar o ambiente, execute os arquivos conforme a etapa desejada:
+### Ingestão do PDF
+
+Carrega o PDF, divide em chunks e armazena embeddings em duas coleções no pgvector:
+- `{PG_VECTOR_COLLECTION}-gemini` — gerada com Google Gemini (com rate limit: 5 docs/lote, 10s de espera)
+- `{PG_VECTOR_COLLECTION}-openai` — gerada com OpenAI (sem rate limit)
 
 ```bash
 python3 src/ingest.py
-python3 src/search.py
+```
+
+### Chat
+
+Interface de chat com RAG sobre o conteúdo do PDF:
+
+```bash
 python3 src/chat.py
 ```
 
-## Observação
+## Observações
 
-Se algum script retornar erro de inicialização, verifique primeiro as variáveis de ambiente e a conexão com o banco.
-O modelo GOOGLE_EMBEDDING_MODEL='models/embedding-001' foi deprecado e removido pelo google. Entao substitui para o modelo mais recente "models/gemini-embedding-001"
+- Se algum script retornar erro de inicialização, verifique as variáveis de ambiente e a conexão com o banco.
+- As coleções no banco são nomeadas automaticamente com sufixo `-gemini` e `-openai` a partir do valor de `PG_VECTOR_COLLECTION`.
