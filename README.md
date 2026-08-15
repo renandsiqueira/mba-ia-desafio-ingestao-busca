@@ -19,13 +19,13 @@ sudo apt update && sudo apt install python3-full -y
 Depois, crie o ambiente virtual na raiz do projeto:
 
 ```bash
-python3 -m venv .venv
+python3.12 -m venv .venv
 ```
 
 Ative o ambiente virtual:
 
 ```bash
-source .venv/bin/activate
+source venv/bin/activate
 ```
 
 ## 2. Instalar as dependências

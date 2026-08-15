@@ -40,39 +40,47 @@ def ingest_pdf():
   ingest_pdf_open_ai(enriched)
 
 def ingest_pdf_open_ai(enriched):
+  print("Iniciando ingestão com OpenAI Embeddings...")
   embeddings = OpenAIEmbeddings(
     model=os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
   )
   ids = [f"doc-openai-{i}" for i in range(len(enriched))]
+  collection_name=f"{os.getenv('PG_VECTOR_COLLECTION')}-openai"
 
   # Sem rate limit: batch_size=None e sleep_time=0
   store_pdf_in_pgvector(
     embeddings=embeddings,
     enriched=enriched,
     ids=ids,
+    collection_name=collection_name,
     batch_size=None,
     sleep_time=0
   )
+  print("Ingestão com OpenAI Embeddings concluída com sucesso!")
 
 def ingest_pdf_google_gen_ai(enriched):
+  print("Iniciando ingestão com Google Generative AI Embeddings...")
   embeddings = GoogleGenerativeAIEmbeddings(
-    model=os.getenv("GOOGLE_EMBEDDING_MODEL", "models/text-embedding-004")
+    model=os.getenv("GOOGLE_EMBEDDING_MODEL", "models/gemini-embedding-001")
   )
   ids = [f"doc-gemini-{i}" for i in range(len(enriched))]
+  collection_name=f"{os.getenv('PG_VECTOR_COLLECTION')}-gemini"
 
   # Com rate limit: envia 5 documentos por vez e aguarda 10 segundos
   store_pdf_in_pgvector(
     embeddings=embeddings,
     enriched=enriched,
+    collection_name=collection_name,
     ids=ids,
     batch_size=5,
     sleep_time=10
   )
+  print("Ingestão com Google Generative AI Embeddings concluída com sucesso!")
 
-def store_pdf_in_pgvector(embeddings, enriched, ids, batch_size=None, sleep_time=0):
+def store_pdf_in_pgvector(embeddings, collection_name, enriched, ids, batch_size=None, sleep_time=0):
   store = PGVector(
     embeddings=embeddings,
-    collection_name=os.getenv("PG_VECTOR_COLLECTION"),
+    collection_name=collection_name,
     connection=os.getenv("DATABASE_URL"),
     use_jsonb=True,
   )
